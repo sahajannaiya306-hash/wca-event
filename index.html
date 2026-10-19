@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wellness Coach Academy - Registration</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <img class="logo" src="logo.png" alt="Logo">
+    <div class="eyebrow">Wellness Coach Academy</div>
+    <h1>Event Registration</h1>
+    <div class="sub">Register using the ticket number printed on your paper ticket</div>
+    <div class="rule"></div>
+  </header>
+
+  <section class="ticket">
+    <label>Ticket No. *</label>
+    <input class="mono" id="r-ticket" placeholder="e.g. 4521" inputmode="numeric" maxlength="4">
+
+    <label>Herbalife ID *</label>
+    <input id="r-hlid" placeholder="Herbalife ID" autocapitalize="characters">
+
+    <label>Full Name *</label>
+    <input id="r-name" placeholder="Full name">
+
+    <label>Mobile No. *</label>
+    <input id="r-mobile" class="mono" placeholder="10-digit mobile number" inputmode="tel">
+
+    <label>Club Code</label>
+    <input id="r-club" placeholder="Club code">
+
+    <label>Sponsor Name</label>
+    <input id="r-sponsor" placeholder="Sponsor name">
+
+    <label>Level *</label>
+    <button type="button" class="level-select-field" id="lv-field"><span id="lv-text">Tap to select level</span><span class="level-select-arrow">&#9662;</span></button>
+    <div class="level-panel" id="lv-panel"></div>
+    <input type="hidden" id="r-level">
+
+    <button class="btn" id="r-submit">Complete Registration</button>
+    <div id="r-msg"></div>
+  </section>
+
+  <div class="hint">After registering, open the QR page and enter your mobile number to get your QR code.</div>
+</div>
+
+<script src="common.js"></script>
+<script>
+var field = $('lv-field'), panel = $('lv-panel'), hidden = $('r-level');
+LEVELS.forEach(function (lv) {
+  var b = document.createElement('button');
+  b.type = 'button'; b.className = 'level-option'; b.textContent = lv;
+  b.addEventListener('click', function () {
+    hidden.value = lv; $('lv-text').textContent = lv;
+    field.classList.add('has-value'); field.classList.remove('open'); panel.style.display = 'none';
+    Array.prototype.forEach.call(panel.children, function (c) { c.classList.toggle('active', c === b); });
+  });
+  panel.appendChild(b);
+});
+field.addEventListener('click', function () {
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  var open = panel.style.display === 'block';
+  panel.style.display = open ? 'none' : 'block';
+  field.classList.toggle('open', !open);
+});
+
+$('r-submit').addEventListener('click', async function () {
+  var btn = $('r-submit');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  var res = await registerTicket({
+    ticket: $('r-ticket').value, hlid: $('r-hlid').value, name: $('r-name').value,
+    mobile: $('r-mobile').value, club: $('r-club').value, sponsor: $('r-sponsor').value, level: hidden.value
+  });
+  btn.disabled = false; btn.textContent = 'Complete Registration';
+  showMsg('r-msg', res.ok ? 'ok' : 'err', esc(res.msg));
+  if (res.ok) {
+    ['r-ticket', 'r-hlid', 'r-name', 'r-mobile', 'r-club', 'r-sponsor'].forEach(function (id) { $(id).value = ''; });
+    hidden.value = ''; $('lv-text').textContent = 'Tap to select level'; field.classList.remove('has-value');
+    Array.prototype.forEach.call(panel.children, function (c) { c.classList.remove('active'); });
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wellness Coach Academy - My QR Code</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="firebase-config.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <img class="logo" src="logo.png" alt="Logo">
+    <div class="eyebrow">Wellness Coach Academy</div>
+    <h1>Get My QR Code</h1>
+    <div class="sub">Enter the mobile number you registered with</div>
+    <div class="rule"></div>
+  </header>
+
+  <section class="ticket">
+    <label>Mobile No. *</label>
+    <input class="mono" id="q-mobile" placeholder="10-digit mobile number" inputmode="tel">
+    <button class="btn gold" id="q-submit">Find My QR Code</button>
+    <div id="q-msg"></div>
+
+    <div class="qrbox" id="q-result" style="display:none;">
+      <div id="qrholder"></div>
+      <div class="detail-card">
+        <div class="detail-row"><span class="k">Ticket No.</span><span class="v" id="d-ticket"></span></div>
+        <div class="detail-row"><span class="k">Herbalife ID</span><span class="v" id="d-hlid"></span></div>
+        <div class="detail-row"><span class="k">Name</span><span class="v" id="d-name"></span></div>
+        <div class="detail-row"><span class="k">Level</span><span class="v" id="d-level"></span></div>
+      </div>
+      <div class="hint">Show this QR code at the entry gate</div>
+      <button class="btn" id="q-download" style="margin-top:14px;">Download QR Code</button>
+    </div>
+  </section>
+</div>
+
+<script src="common.js"></script>
+<script>
+var current = null;
+
+$('q-submit').addEventListener('click', async function () {
+  var mobile = normMobile($('q-mobile').value);
+  showMsg('q-msg', '', '');
+  $('q-result').style.display = 'none';
+  if (!/^[0-9]{10}$/.test(mobile)) { showMsg('q-msg', 'err', 'Please enter a valid 10-digit mobile number.'); return; }
+  var btn = $('q-submit');
+  btn.disabled = true; btn.textContent = 'Searching...';
+  try {
+    var snap = await db.collection('mobiles').doc(mobile).get();
+    if (!snap.exists) showMsg('q-msg', 'err', 'No registration found for this mobile number.');
+    else renderQR(snap.data());
+  } catch (e) {
+    showMsg('q-msg', 'err', 'Could not load your registration. Please check your internet connection and try again.');
+  }
+  btn.disabled = false; btn.textContent = 'Find My QR Code';
+});
+
+function renderQR(r) {
+  current = r;
+  var holder = $('qrholder');
+  holder.innerHTML = '';
+  new QRCode(holder, { text: String(r.ticket), width: 200, height: 200, colorDark: '#0A3527', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+  var img = document.createElement('img');
+  img.className = 'qr-logo'; img.src = 'logo.png';
+  img.onerror = function () { img.style.display = 'none'; };
+  holder.appendChild(img);
+  $('d-ticket').textContent = r.ticket;
+  $('d-hlid').textContent = r.hlid || '-';
+  $('d-name').textContent = r.name || '-';
+  $('d-level').textContent = r.level || '-';
+  $('q-result').style.display = 'flex';
+}
+
+function rr(c, x, y, w, h, rad) {
+  c.beginPath(); c.moveTo(x + rad, y);
+  c.arcTo(x + w, y, x + w, y + h, rad); c.arcTo(x + w, y + h, x, y + h, rad);
+  c.arcTo(x, y + h, x, y, rad); c.arcTo(x, y, x + w, y, rad); c.closePath();
+}
+
+$('q-download').addEventListener('click', async function () {
+  var r = current; if (!r) return;
+  var qrCanvas = $('qrholder').querySelector('canvas'); if (!qrCanvas) return;
+  var logo = await loadImage('logo.png');
+  var W = 720, H = 1120;
+  var out = document.createElement('canvas'); out.width = W; out.height = H;
+  var c = out.getContext('2d');
+
+  c.fillStyle = '#FAF5E9'; c.fillRect(0, 0, W, H);
+  c.save(); c.shadowColor = 'rgba(15,76,54,0.18)'; c.shadowBlur = 30; c.shadowOffsetY = 10;
+  c.fillStyle = '#fff'; rr(c, 40, 40, W - 80, H - 80, 34); c.fill(); c.restore();
+
+  c.save(); rr(c, 40, 40, W - 80, 190, 34); c.clip();
+  c.fillStyle = '#0F4C36'; c.fillRect(40, 40, W - 80, 190);
+  c.fillStyle = '#B8863B'; c.fillRect(40, 222, W - 80, 8); c.restore();
+
+  c.textAlign = 'center';
+  c.fillStyle = '#D9AE6B'; c.font = '600 22px "Courier New", monospace'; c.fillText('EVENT PASS', W / 2, 100);
+  c.fillStyle = '#fff'; c.font = '700 44px Georgia, serif'; c.fillText('Wellness Coach Academy', W / 2, 165);
+
+  var qs = 400, fx = (W - qs - 60) / 2, fy = 275;
+  c.fillStyle = '#fff'; c.strokeStyle = '#0F4C36'; c.lineWidth = 5;
+  rr(c, fx, fy, qs + 60, qs + 60, 24); c.fill(); c.stroke();
+  c.imageSmoothingEnabled = false;
+  c.drawImage(qrCanvas, fx + 30, fy + 30, qs, qs);
+  c.imageSmoothingEnabled = true;
+  if (logo) {
+    var ls = qs * 0.2, lx = fx + 30 + (qs - ls) / 2, ly = fy + 30 + (qs - ls) / 2;
+    c.fillStyle = '#fff'; rr(c, lx - 8, ly - 8, ls + 16, ls + 16, 14); c.fill();
+    c.drawImage(logo, lx, ly, ls, ls);
+  }
+
+  c.fillStyle = '#0A3527'; c.font = '700 54px "Courier New", monospace'; c.fillText('Ticket No. ' + r.ticket, W / 2, 855);
+  c.strokeStyle = '#D8C9A3'; c.lineWidth = 2; c.setLineDash([10, 8]);
+  c.beginPath(); c.moveTo(90, 885); c.lineTo(W - 90, 885); c.stroke(); c.setLineDash([]);
+
+  function fit(t, maxW, px, wt, fam) { c.font = wt + ' ' + px + 'px ' + fam; while (c.measureText(t).width > maxW && px > 18) { px -= 2; c.font = wt + ' ' + px + 'px ' + fam; } }
+  c.fillStyle = '#20281F'; fit(r.name || '', W - 160, 44, '700', 'Georgia, serif'); c.fillText(r.name || '', W / 2, 940);
+  var hl = 'Herbalife ID: ' + (r.hlid || '');
+  c.fillStyle = '#5c6a58'; fit(hl, W - 160, 30, '600', 'Arial, sans-serif'); c.fillText(hl, W / 2, 985);
+  c.fillStyle = '#B8863B'; fit(r.level || '', W - 160, 30, '700', 'Arial, sans-serif'); c.fillText(r.level || '', W / 2, 1025);
+
+  var a = document.createElement('a');
+  a.download = 'WCA-ticket-' + r.ticket + '.png'; a.href = out.toDataURL('image/png');
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+</script>
+</body>
+</html>

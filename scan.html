@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wellness Coach Academy - Entry Check-in</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="firebase-config.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <img class="logo" src="logo.png" alt="Logo">
+    <div class="eyebrow">Wellness Coach Academy &middot; Admin</div>
+    <h1>Entry Check-in</h1>
+    <div class="sub">For organizers only</div>
+    <div class="rule"></div>
+  </header>
+
+  <section class="ticket flat" id="login-box" style="display:none;">
+    <label>Admin Email</label>
+    <input id="login-email" type="email" autocomplete="username">
+    <label>Password</label>
+    <input id="login-pass" type="password" autocomplete="current-password">
+    <button class="btn" id="login-btn">Sign In</button>
+    <div id="login-msg"></div>
+  </section>
+
+  <section class="ticket flat" id="app-box" style="display:none;">
+    <button class="btn ghost" id="a-start" style="margin-top:0;">Start Camera</button>
+    <div id="a-cam" style="display:none; margin-top:14px;">
+      <div class="scan-frame"><video id="a-video" playsinline autoplay muted></video></div>
+      <canvas id="a-canvas" style="display:none;"></canvas>
+      <div class="hint">Hold the attendee's QR code in front of the camera</div>
+    </div>
+    <div id="a-msg"></div>
+
+    <label style="margin-top:22px;">Or enter ticket number manually</label>
+    <div style="display:flex; gap:8px;">
+      <input class="mono" id="m-ticket" placeholder="Ticket No." inputmode="numeric">
+      <button class="btn small" id="m-go" style="margin-top:0;">Check In</button>
+    </div>
+    <button class="btn ghost logout-btn" style="margin-top:22px;">Sign Out</button>
+  </section>
+</div>
+
+<div id="result-overlay">
+  <div class="big" id="ro-title"></div>
+  <div class="who" id="ro-who"></div>
+  <div class="meta" id="ro-meta"></div>
+  <button id="ro-next">Scan Next Ticket</button>
+</div>
+
+<script src="common.js"></script>
+<script>
+var stream = null, scanning = false, video, canvas, ctx, busy = false;
+
+setupLogin(function () {});
+
+function beep(freq, ms) {
+  try {
+    var A = window.AudioContext || window.webkitAudioContext; var ac = new A();
+    var o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = freq; o.connect(g); g.connect(ac.destination); g.gain.value = 0.2;
+    o.start(); setTimeout(function () { o.stop(); ac.close(); }, ms);
+  } catch (e) {}
+}
+function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+
+$('a-start').addEventListener('click', function () {
+  showMsg('a-msg', '', '');
+  video = $('a-video'); canvas = $('a-canvas'); ctx = canvas.getContext('2d');
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(function (s) {
+      stream = s; video.srcObject = stream;
+      $('a-cam').style.display = 'block'; $('a-start').style.display = 'none';
+      scanning = true; requestAnimationFrame(tick);
+    })
+    .catch(function (err) {
+      showMsg('a-msg', 'err', 'Could not start the camera.<br>Error: ' + esc(err && err.name) + ' - ' + esc(err && err.message) + '<br>Allow camera permission for this site and try again.');
+    });
+});
+
+function tick() {
+  if (!scanning) return;
+  if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var code = jsQR(img.data, img.width, img.height);
+    if (code && code.data) { scanning = false; checkIn(code.data.trim()); return; }
+  }
+  requestAnimationFrame(tick);
+}
+
+async function checkIn(raw) {
+  if (busy) return; busy = true;
+  var ticket = String(raw).replace(/\D/g, '');
+  if (!/^[1-9][0-9]{0,3}$/.test(ticket) || Number(ticket) > MAX_TICKET) {
+    busy = false; return show('bad', 'INVALID QR', 'Not a valid ticket', 'Scanned: ' + esc(String(raw).slice(0, 40)));
+  }
+  var ref = db.collection('tickets').doc(ticket);
+  try {
+    var result = await db.runTransaction(async function (tx) {
+      var snap = await tx.get(ref);
+      if (!snap.exists) return { notFound: true };
+      var d = snap.data();
+      if (d.checkedIn) return { dup: true, d: d };
+      tx.update(ref, { checkedIn: true, checkedInAt: firebase.firestore.FieldValue.serverTimestamp() });
+      return { ok: true, d: d };
+    });
+    busy = false;
+    if (result.notFound) return show('bad', 'NOT REGISTERED', 'Ticket No. ' + ticket, 'No registration found for this ticket.');
+    var d = result.d;
+    var meta = 'Ticket No. ' + esc(d.ticket) + '<br>Herbalife ID: ' + esc(d.hlid) + '<br>' + esc(d.level) + (d.club ? '<br>Club: ' + esc(d.club) : '') + '<br>Mobile: ' + esc(d.mobile);
+    if (result.dup) {
+      var when = d.checkedInAt && d.checkedInAt.toDate ? d.checkedInAt.toDate().toLocaleString('en-IN') : '';
+      return show('dup', 'ALREADY CHECKED IN', esc(d.name), meta + (when ? '<br>At ' + esc(when) : ''));
+    }
+    show('good', 'WELCOME', esc(d.name), meta);
+  } catch (e) {
+    busy = false;
+    show('bad', 'ERROR', 'Could not verify', 'Check your internet connection and that you are signed in as admin.');
+  }
+}
+
+function show(kind, title, who, meta) {
+  var o = $('result-overlay');
+  o.className = kind; o.style.display = 'flex';
+  $('ro-title').textContent = title; $('ro-who').innerHTML = who; $('ro-meta').innerHTML = meta;
+  if (kind === 'good') { beep(880, 180); buzz(120); } else { beep(220, 500); buzz([200, 100, 200]); }
+}
+
+$('ro-next').addEventListener('click', function () {
+  $('result-overlay').style.display = 'none';
+  if (stream) { scanning = true; requestAnimationFrame(tick); }
+});
+
+$('m-go').addEventListener('click', function () {
+  var t = $('m-ticket').value; $('m-ticket').value = ''; checkIn(t);
+});
+</script>
+</body>
+</html>
