@@ -1,6 +1,7 @@
 // Shared helpers for all pages (Wellness Coach Academy)
 firebase.initializeApp(FIREBASE_CONFIG);
 var db = firebase.firestore();
+db.settings({ experimentalForceLongPolling: true, merge: true }); // helps on networks that block Firestore streaming
 var auth = firebase.auth();
 
 var MAX_TICKET = 7000;
