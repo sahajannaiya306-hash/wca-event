@@ -84,7 +84,7 @@ async function registerTicket(d) {
       try { var again = await precheck(); if (!again.ok) return again; } catch (x) {}
       return { ok: false, msg: 'Registration could not be saved. Please check the details and try again.' };
     }
-    return { ok: false, msg: 'Network error. Please check your internet connection and try again.' };
+    return { ok: false, msg: 'Could not save (' + (e && e.code ? e.code : 'error') + '): ' + (e && e.message ? e.message : '') };
   }
 }
 
